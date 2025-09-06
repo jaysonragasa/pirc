@@ -1,386 +1,470 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mIRC.js - Simple HTML Client</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* A little bit of custom styling for scrollbars */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #1f2937; /* bg-gray-800 */
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #4b5563; /* bg-gray-600 */
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #6b7280; /* bg-gray-500 */
-        }
-        html, body {
-            height: 100%;
-            overflow: hidden;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>pIRC — mIRC-style web chat</title>
+  <!-- Tailwind via CDN (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* small extra styles to emulate mIRC look */
+    .mircss {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+      font-size: 0.95rem;
+    }
+    .msg-user { font-weight: 600; }
+    .msg-system { color: #9ca3af; font-style: italic; }
+    .badge { background: linear-gradient(180deg,#111827,#0b1220); }
+    /* scrolling smoothing */
+    .scroll-smooth { scroll-behavior: smooth; }
+  </style>
 </head>
-<body class="bg-gray-800 text-gray-200 font-sans h-screen w-screen flex flex-col antialiased">
-
-    <!-- Connection Modal -->
-    <div id="connect-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="bg-gray-700 p-8 rounded-lg shadow-2xl w-full max-w-md mx-4">
-            <h2 class="text-2xl font-bold mb-6 text-white text-center">Connect to IRC</h2>
-            <form id="connect-form">
-                <div class="mb-4">
-                    <label for="nickname" class="block text-gray-300 mb-2">Nickname</label>
-                    <input type="text" id="nickname" class="w-full bg-gray-800 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-                </div>
-                <div class="mb-6">
-                    <label for="channel" class="block text-gray-300 mb-2">Channel</label>
-                    <input type="text" id="channel" value="#mIRC.js-test" class="w-full bg-gray-800 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="#channel-name" required>
-                </div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors duration-200">
-                    Connect
-                </button>
-            </form>
+<body class="min-h-screen bg-gray-900 text-gray-100 mircss">
+  <div class="max-w-6xl mx-auto p-3">
+    <header class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-indigo-600 rounded flex items-center justify-center text-white font-bold">pIRC</div>
+        <div>
+          <h1 class="text-xl font-semibold">pIRC <span class="text-sm text-gray-400">mIRC-style web chat</span></h1>
+          <p class="text-xs text-gray-400">Standalone HTML+JS+Tailwind — mobile friendly</p>
         </div>
-    </div>
+      </div>
 
-    <!-- Main Header -->
-    <header class="bg-gray-900 shadow-md p-3 flex justify-between items-center z-10 flex-shrink-0">
-        <h1 class="text-xl font-bold text-white">mIRC.js</h1>
-        <div id="connection-status" class="flex items-center space-x-2 sm:space-x-4 hidden">
-            <div class="text-sm text-right">
-                <div id="user-nickname" class="font-semibold"></div>
-                <div id="user-channel" class="text-gray-400"></div>
-            </div>
-            <button id="user-list-toggle" class="p-2 rounded-md hover:bg-gray-700 md:hidden">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1a6 6 0 00-1.78-4.125" />
-                </svg>
-            </button>
-            <button id="disconnect-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-md transition-colors duration-200">
-                Disconnect
-            </button>
-        </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-theme" class="px-3 py-1 rounded border border-gray-700 text-sm">Toggle Theme</button>
+        <button id="btn-help" class="px-3 py-1 rounded bg-indigo-600 text-sm">Help / Commands</button>
+      </div>
     </header>
-    
-    <!-- Chat Area -->
-    <main id="chat-container" class="flex-grow flex overflow-hidden hidden">
-        <!-- Message List -->
-        <div class="flex-grow flex flex-col">
-            <div id="message-list" class="flex-grow overflow-y-auto p-2 space-y-1">
-                <!-- Messages will be injected here by JavaScript -->
-            </div>
-            <!-- Message Input -->
-            <div class="p-4 bg-gray-900">
-                <form id="message-form">
-                    <input type="text" id="message-input" placeholder="Type your message..." class="w-full bg-gray-800 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off">
-                </form>
-            </div>
+
+    <main class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <!-- Left: Connection + channels -->
+      <aside class="md:col-span-1 bg-gray-800 rounded p-3 space-y-3">
+        <form id="connect-form" class="space-y-2">
+          <div class="flex gap-2">
+            <input id="server" class="flex-1 bg-transparent border border-gray-700 rounded px-2 py-1 text-sm" placeholder="WebSocket URL (wss://)" value="wss://example-irc-ws.example/ws" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <input id="nick" class="bg-transparent border border-gray-700 rounded px-2 py-1 text-sm" placeholder="Nick" value="pircUser" />
+            <input id="realname" class="bg-transparent border border-gray-700 rounded px-2 py-1 text-sm" placeholder="Real name" value="pIRC web client" />
+          </div>
+          <div class="flex gap-2">
+            <button id="btn-connect" class="flex-1 px-2 py-1 rounded bg-green-600 text-sm">Connect</button>
+            <button id="btn-disconnect" type="button" class="flex-1 px-2 py-1 rounded bg-red-600 text-sm" disabled>Disconnect</button>
+          </div>
+        </form>
+
+        <section>
+          <h2 class="text-xs text-gray-400 uppercase mb-2">Channels</h2>
+          <ul id="channels-list" class="space-y-1 max-h-48 overflow-auto">
+            <!-- channels added dynamically -->
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-xs text-gray-400 uppercase mt-3 mb-2">Quick</h2>
+          <div class="flex gap-2">
+            <button id="btn-join-#general" class="px-2 py-1 rounded border border-gray-700 text-sm">#general</button>
+            <button id="btn-join-#help" class="px-2 py-1 rounded border border-gray-700 text-sm">#help</button>
+          </div>
+        </section>
+      </aside>
+
+      <!-- Main chat area -->
+      <section class="md:col-span-2 bg-gray-800 rounded p-2 flex flex-col" id="chat-area">
+        <div class="flex items-center justify-between px-2 mb-2">
+          <div>
+            <strong id="current-channel">Not connected</strong>
+            <div id="status" class="text-xs text-gray-400">Disconnected</div>
+          </div>
+          <div class="text-xs text-gray-400">
+            <span id="conn-info"></span>
+          </div>
         </div>
-        <!-- User List -->
-        <aside id="user-list-aside" class="w-64 bg-gray-900 flex-shrink-0 p-4 overflow-y-auto transform transition-transform duration-300 ease-in-out fixed inset-y-0 right-0 z-20 translate-x-full md:relative md:translate-x-0 md:block">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold text-white">Users (<span id="user-count">0</span>)</h3>
-                <button id="user-list-close" class="p-1 rounded-md hover:bg-gray-700 md:hidden">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <ul id="user-list">
-                <!-- User list will be injected here -->
-            </ul>
-        </aside>
+
+        <div id="messages" class="flex-1 overflow-auto rounded bg-gray-900 p-2 space-y-2 scroll-smooth" style="min-height:280px;"> 
+          <!-- messages -->
+        </div>
+
+        <div class="mt-2">
+          <div class="flex gap-2">
+            <input id="input" class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm" placeholder="Type a message or /command. e.g. /join #channel" autocomplete="off" />
+            <button id="send" class="px-3 py-2 rounded bg-indigo-600">Send</button>
+          </div>
+          <div class="text-xs text-gray-500 mt-1">Swipe up to see older messages. Commands: /join, /part, /nick, /msg, /me, /raw</div>
+        </div>
+      </section>
+
+      <!-- Right: nick list / settings -->
+      <aside class="md:col-span-1 bg-gray-800 rounded p-3 flex flex-col">
+        <div class="mb-3">
+          <h3 class="text-sm font-semibold">Nicklist</h3>
+          <div id="nicklist" class="mt-2 text-sm text-gray-300 max-h-64 overflow-auto"></div>
+        </div>
+
+        <div class="mt-auto">
+          <h3 class="text-sm font-semibold">Settings</h3>
+          <label class="flex items-center gap-2 mt-2 text-sm text-gray-300"><input id="autoscroll" type="checkbox" checked /> Auto-scroll</label>
+          <label class="flex items-center gap-2 mt-2 text-sm text-gray-300"><input id="timestamps" type="checkbox" checked /> Show timestamps</label>
+        </div>
+      </aside>
     </main>
 
-    <!-- Placeholder for when not connected -->
-    <div id="disconnected-placeholder" class="flex-grow flex items-center justify-center text-gray-500 text-center px-4">
-        <p>Please connect to a server to begin chatting.</p>
+    <footer class="mt-3 text-xs text-gray-500">Built with HTML + JavaScript + Tailwind — pIRC</footer>
+  </div>
+
+  <!-- Help modal -->
+  <div id="help-modal" class="fixed inset-0 hidden items-center justify-center bg-black bg-opacity-60 p-4">
+    <div class="max-w-xl w-full bg-gray-800 rounded p-4">
+      <h2 class="text-lg font-semibold">pIRC — Commands & help</h2>
+      <ul class="list-disc pl-5 mt-3 text-sm text-gray-300 space-y-1">
+        <li><strong>/join &lt;#channel&gt;</strong> - join a channel</li>
+        <li><strong>/part &lt;#channel&gt;</strong> - leave channel</li>
+        <li><strong>/nick &lt;newnick&gt;</strong> - change nick</li>
+        <li><strong>/me &lt;action&gt;</strong> - action message</li>
+        <li><strong>/msg &lt;nick&gt; &lt;message&gt;</strong> - private message</li>
+        <li><strong>/raw &lt;raw-line&gt;</strong> - send raw IRC line to server</li>
+        <li><strong>/clear</strong> - clear chat window</li>
+      </ul>
+      <div class="mt-4 flex justify-end">
+        <button id="help-close" class="px-3 py-1 rounded bg-indigo-600">Close</button>
+      </div>
     </div>
+  </div>
 
+<script>
+/* pIRC — simple mIRC-style web client (frontend only)
+   Notes:
+   - This client speaks plain IRC over WebSocket. You need an IRC-to-WebSocket gateway that exposes IRC via websockets.
+   - Example gateway: some IRC servers provide a websocket endpoint (wss://). For testing you can run a small websocket proxy that translates to IRC.
+   - This is a frontend-only single file. No backend bundled.
+*/
 
-    <script>
-        // --- DOM Elements ---
-        const connectModal = document.getElementById('connect-modal');
-        const connectForm = document.getElementById('connect-form');
-        const nicknameInput = document.getElementById('nickname');
-        const channelInput = document.getElementById('channel');
-        
-        const headerStatus = document.getElementById('connection-status');
-        const userNickname = document.getElementById('user-nickname');
-        const userChannel = document.getElementById('user-channel');
-        const disconnectBtn = document.getElementById('disconnect-btn');
+(() => {
+  const $ = id => document.getElementById(id);
+  const messages = $('messages');
+  const channelsList = $('channels-list');
+  const nicklistEl = $('nicklist');
+  const currentChannelEl = $('current-channel');
+  const statusEl = $('status');
+  const connInfoEl = $('conn-info');
 
-        const chatContainer = document.getElementById('chat-container');
-        const disconnectedPlaceholder = document.getElementById('disconnected-placeholder');
-        
-        const messageList = document.getElementById('message-list');
-        const messageForm = document.getElementById('message-form');
-        const messageInput = document.getElementById('message-input');
+  let ws = null;
+  let nick = $('nick').value || 'pircUser';
+  let connected = false;
+  let activeChannel = null;
+  let autoscroll = true;
+  let timestamps = true;
 
-        const userListAside = document.getElementById('user-list-aside');
-        const userListToggle = document.getElementById('user-list-toggle');
-        const userListClose = document.getElementById('user-list-close');
-        const userListEl = document.getElementById('user-list');
-        const userCount = document.getElementById('user-count');
+  function makeTimestamp() {
+    if (!timestamps) return '';
+    const d = new Date();
+    const hh = d.getHours().toString().padStart(2,'0');
+    const mm = d.getMinutes().toString().padStart(2,'0');
+    return '['+hh+':'+mm+'] ';
+  }
 
-        // --- App State ---
-        let isConnected = false;
-        let socket = null; 
-        let currentUsers = new Map();
+  function pushSystem(msg) {
+    const el = document.createElement('div');
+    el.className = 'msg-system text-sm';
+    el.textContent = makeTimestamp() + msg;
+    messages.appendChild(el);
+    if (autoscroll) messages.scrollTop = messages.scrollHeight;
+  }
 
-        // --- IRC Constants ---
-        const WEBSOCKET_URL = "wss://irc.libera.chat/webirc/websocket";
+  function pushMessage(from, text, isAction=false) {
+    const wrap = document.createElement('div');
+    wrap.className = 'p-1 rounded';
+    const time = makeTimestamp();
+    const nameEl = document.createElement('span');
+    nameEl.className = 'msg-user text-indigo-300';
+    nameEl.textContent = from;
+    const sep = document.createElement('span');
+    sep.className = 'text-gray-400 px-2';
+    sep.textContent = ':';
+    const textEl = document.createElement('span');
+    textEl.className = 'text-sm';
+    textEl.textContent = (isAction ? '\u0001ACTION ' : '') + text;
 
+    if (isAction) {
+      wrap.innerHTML = `<span class='text-gray-400'>${time}</span> <em>* ${from} ${text}</em>`;
+    } else {
+      wrap.innerHTML = `<span class='text-gray-400'>${time}</span> <span class='text-indigo-300 font-semibold'>${escapeHtml(from)}</span><span class='text-gray-400 px-2'>:</span> <span class='text-sm'>${escapeHtml(text)}</span>`;
+    }
+    messages.appendChild(wrap);
+    if (autoscroll) messages.scrollTop = messages.scrollHeight;
+  }
 
-        // --- UI Update Functions ---
+  function escapeHtml(s) {
+    return (s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
 
-        function showChatWindow() {
-            connectModal.classList.add('hidden');
-            disconnectedPlaceholder.classList.add('hidden');
-            chatContainer.classList.remove('hidden');
-            headerStatus.classList.remove('hidden');
-        }
+  function updateChannelsUI() {
+    channelsList.innerHTML = '';
+    const chans = Object.keys(state.channels || {});
+    if (chans.length === 0) {
+      channelsList.innerHTML = '<li class="text-xs text-gray-500">No channels</li>';
+      return;
+    }
+    chans.forEach(c => {
+      const li = document.createElement('li');
+      li.className = 'flex items-center justify-between p-1 rounded hover:bg-gray-700';
+      li.innerHTML = `<div class='text-sm'>${escapeHtml(c)}</div><div class='text-xs text-gray-400'>${state.channels[c].users.length}</div>`;
+      li.addEventListener('click', () => switchChannel(c));
+      channelsList.appendChild(li);
+    });
+  }
 
-        function showConnectWindow() {
-            connectModal.classList.remove('hidden');
-            disconnectedPlaceholder.classList.remove('hidden');
-            chatContainer.classList.add('hidden');
-            headerStatus.classList.add('hidden');
-            messageInput.value = '';
-        }
+  function updateNicklistUI(channel) {
+    nicklistEl.innerHTML = '';
+    const users = (state.channels[channel] && state.channels[channel].users) || [];
+    users.forEach(u => {
+      const el = document.createElement('div');
+      el.className = 'py-0.5 text-sm border-b border-gray-800';
+      el.textContent = u;
+      nicklistEl.appendChild(el);
+    });
+  }
 
-        function addMessage(msg) {
-            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            let messageElement = document.createElement('div');
+  function switchChannel(c) {
+    activeChannel = c;
+    currentChannelEl.textContent = c;
+    updateNicklistUI(c);
+    pushSystem('Switched to ' + c);
+  }
 
-            switch (msg.type) {
-                case 'system':
-                    messageElement.className = "text-blue-400 px-4 py-1";
-                    messageElement.innerHTML = `-- ${msg.text} --`;
-                    break;
-                case 'join':
-                    messageElement.className = "text-green-500 px-4 py-1";
-                    messageElement.innerHTML = `--> ${msg.nick} has joined the channel.`;
-                    break;
-                case 'part':
-                    messageElement.className = "text-red-500 px-4 py-1";
-                    messageElement.innerHTML = `<-- ${msg.nick} has left the channel (${msg.reason || ''}).`;
-                    break;
-                 case 'quit':
-                    messageElement.className = "text-red-500 px-4 py-1";
-                    messageElement.innerHTML = `<-- ${msg.nick} has quit (${msg.reason || 'Connection closed'}).`;
-                    break;
-                case 'message':
-                default:
-                    messageElement.className = "flex px-4 py-1 hover:bg-gray-700";
-                    messageElement.innerHTML = `
-                        <span class="text-gray-500 w-16 text-right mr-2 flex-shrink-0">${timestamp}</span>
-                        <span class="font-bold w-32 text-right mr-4 flex-shrink-0 text-cyan-400">&lt;${msg.nick}&gt;</span>
-                        <p class="flex-grow break-words min-w-0">${msg.text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
-                    `;
-            }
-            messageList.appendChild(messageElement);
-            messageList.scrollTop = messageList.scrollHeight;
-        }
+  // Minimal state tracking for channels and nicks
+  const state = { channels: {} };
 
-        function updateUsersUI() {
-            userListEl.innerHTML = ''; // Clear existing users
-            const sortedUsers = [...currentUsers.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  function ensureChannel(c) {
+    if (!state.channels[c]) state.channels[c] = { users: [] };
+  }
 
-            sortedUsers.forEach(([nick, status]) => {
-                const li = document.createElement('li');
-                li.className = "flex items-center mb-2";
-                li.innerHTML = `
-                    <span class="text-yellow-500 mr-2 w-4">${status || ''}</span>
-                    <span class="text-gray-300">${nick}</span>
-                `;
-                userListEl.appendChild(li);
-            });
-            userCount.textContent = currentUsers.size;
-        }
+  function addUserToChannel(c, u) {
+    ensureChannel(c);
+    if (!state.channels[c].users.includes(u)) state.channels[c].users.push(u);
+  }
 
-        function toggleUserList(show) {
-            if (show) {
-                userListAside.classList.remove('translate-x-full');
-            } else {
-                userListAside.classList.add('translate-x-full');
-            }
-        }
+  function removeUserFromChannel(c, u) {
+    ensureChannel(c);
+    state.channels[c].users = state.channels[c].users.filter(x => x !== u);
+  }
 
-        // --- WebSocket & IRC Logic ---
+  // -- IRC message parsing (very simple) --
+  function parseIrcLine(line) {
+    // line examples: ":nick!user@host PRIVMSG #chan :hello world"
+    const original = line;
+    let prefix = null;
+    if (line.startsWith(':')) {
+      const idx = line.indexOf(' ');
+      prefix = line.slice(1, idx);
+      line = line.slice(idx+1);
+    }
+    const spaceIdx = line.indexOf(' ');
+    if (spaceIdx === -1) return;
+    const command = line.slice(0, spaceIdx).toUpperCase();
+    let rest = line.slice(spaceIdx+1).trim();
 
-        function sendIRCCommand(command) {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                console.log("SENT:", command);
-                socket.send(command);
-            }
-        }
+    if (command === 'PING') {
+      sendRaw('PONG ' + rest);
+      pushSystem('PING received -> auto PONG');
+      return;
+    }
 
-        function handleSocketMessage(event) {
-            const rawMessage = event.data;
-            console.log("RECV:", rawMessage);
+    if (command === 'PRIVMSG') {
+      // target and message
+      const tgtEnd = rest.indexOf(' ');
+      const target = rest.slice(0, tgtEnd);
+      let msg = rest.slice(tgtEnd+2); // remove leading :
+      const fromNick = prefix ? prefix.split('!')[0] : 'server';
+      // action?
+      if (msg.startsWith('\u0001ACTION')) {
+        const actionText = msg.replace(/^\u0001ACTION\s*/,'').replace(/\u0001$/,'');
+        pushMessage(fromNick, actionText, true);
+      } else {
+        pushMessage(fromNick, msg);
+      }
+      return;
+    }
 
-            if (rawMessage.startsWith("PING")) {
-                sendIRCCommand(`PONG ${rawMessage.substring(5)}`);
-                return;
-            }
+    if (command === 'JOIN') {
+      const chan = rest.replace(/^:/,'');
+      const who = prefix ? prefix.split('!')[0] : 'unknown';
+      ensureChannel(chan);
+      addUserToChannel(chan, who);
+      pushSystem(`${who} joined ${chan}`);
+      updateChannelsUI();
+      if (!activeChannel) switchChannel(chan);
+      return;
+    }
 
-            const parsed = rawMessage.match(/^(?:[:](\S+)\s)?(\S+)\s?(.+)?$/);
-            if (!parsed) return;
+    if (command === 'PART') {
+      const [chan, ...restParts] = rest.split(' ');
+      const who = prefix ? prefix.split('!')[0] : 'unknown';
+      removeUserFromChannel(chan, who);
+      pushSystem(`${who} left ${chan}`);
+      updateChannelsUI();
+      if (activeChannel === chan) updateNicklistUI(chan);
+      return;
+    }
 
-            const [, prefix, command, paramsStr] = parsed;
-            const params = paramsStr ? paramsStr.split(' ') : [];
-            const trailing = paramsStr && paramsStr.includes(':') ? paramsStr.substring(paramsStr.indexOf(':') + 1) : null;
-            
-            const nick = prefix ? prefix.split('!')[0] : null;
+    // Numeric replies and other server messages
+    pushSystem(original);
+  }
 
-            switch (command) {
-                case 'PRIVMSG': {
-                    const target = params[0];
-                    if (target.toLowerCase() === channelInput.value.trim().toLowerCase()) {
-                         addMessage({ type: 'message', nick: nick, text: trailing });
-                    }
-                    break;
-                }
-                case 'JOIN': {
-                    if (nick) {
-                        currentUsers.set(nick, '');
-                        updateUsersUI();
-                        addMessage({ type: 'join', nick: nick });
-                    }
-                    break;
-                }
-                 case 'PART': {
-                    if (nick && currentUsers.has(nick)) {
-                        currentUsers.delete(nick);
-                        updateUsersUI();
-                        addMessage({ type: 'part', nick: nick, reason: trailing });
-                    }
-                    break;
-                }
-                case 'QUIT': {
-                     if (nick && currentUsers.has(nick)) {
-                        currentUsers.delete(nick);
-                        updateUsersUI();
-                        addMessage({ type: 'quit', nick: nick, reason: trailing });
-                    }
-                    break;
-                }
-                case '353': { // RPL_NAMREPLY (user list)
-                    const names = trailing.split(' ').filter(n => n);
-                    names.forEach(name => {
-                        const status = ['@', '+'].find(p => name.startsWith(p));
-                        const cleanNick = name.replace(/^[|@+]/, '');
-                        currentUsers.set(cleanNick, status);
-                    });
-                    break;
-                }
-                case '366': { // RPL_ENDOFNAMES (end of user list)
-                    updateUsersUI();
-                    break;
-                }
-                case '433': { // ERR_NICKNAMEINUSE
-                    addMessage({ type: 'system', text: `Nickname '${params[1]}' is already in use.`});
-                    socket.close();
-                    break;
-                }
-                default:
-                    if (trailing) {
-                        addMessage({ type: 'system', text: trailing });
-                    }
-            }
-        }
+  function sendRaw(line) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      pushSystem('[local] Not connected');
+      return;
+    }
+    ws.send(line + '\r\n');
+    console.log('>>', line);
+  }
 
-        function connectToIRC(nickname, channel) {
-            messageList.innerHTML = '';
-            currentUsers.clear();
-            updateUsersUI();
-            addMessage({ type: 'system', text: 'Connecting to server...' });
+  // UI events
+  $('btn-help').addEventListener('click', () => $('help-modal').style.display = 'flex');
+  $('help-close').addEventListener('click', () => $('help-modal').style.display = 'none');
 
-            socket = new WebSocket(WEBSOCKET_URL);
+  $('btn-theme').addEventListener('click', () => {
+    document.documentElement.classList.toggle('dark');
+    document.body.classList.toggle('bg-white');
+  });
 
-            socket.onopen = () => {
-                sendIRCCommand(`NICK ${nickname}`);
-                sendIRCCommand(`USER webirc 0 * :${nickname}`); 
-                sendIRCCommand(`JOIN ${channel}`);
-                
-                isConnected = true;
-                // Update status from "Connecting..." to "Connected"
-                userChannel.textContent = `Connected to ${channel}`;
-            };
+  $('btn-join-#general').addEventListener('click', () => { $('input').value = '/join #general'; $('input').focus(); });
+  $('btn-join-#help').addEventListener('click', () => { $('input').value = '/join #help'; $('input').focus(); });
 
-            socket.onmessage = handleSocketMessage;
+  $('autoscroll').addEventListener('change', (e) => autoscroll = e.target.checked);
+  $('timestamps').addEventListener('change', (e) => timestamps = e.target.checked);
 
-            socket.onclose = () => {
-                isConnected = false;
-                socket = null;
-                addMessage({ type: 'system', text: 'Disconnected from server.' });
-                toggleUserList(false); // Hide user list on disconnect
-                showConnectWindow();
-            };
-            
-            socket.onerror = (error) => {
-                console.error("WebSocket Error:", error);
-                addMessage({ type: 'system', text: 'Connection error. Check console for details.' });
-            };
-        }
+  $('btn-connect').addEventListener('click', (ev) => {
+    ev.preventDefault();
+    const url = $('server').value.trim();
+    nick = $('nick').value.trim() || nick;
+    if (!url) { pushSystem('Please enter a websocket URL'); return; }
+    connect(url);
+  });
 
+  $('btn-disconnect').addEventListener('click', () => {
+    if (ws) ws.close();
+  });
 
-        // --- Event Listeners ---
+  $('send').addEventListener('click', () => handleInput());
+  $('input').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleInput(); });
 
-        connectForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const nickname = nicknameInput.value.trim();
-            const channel = channelInput.value.trim();
-            
-            if (nickname && channel) {
-                const fullChannel = channel.startsWith('#') ? channel : '#' + channel;
-                
-                // Immediately switch to the chat window to show progress
-                userNickname.textContent = nickname;
-                userChannel.textContent = `Connecting to ${fullChannel}...`;
-                showChatWindow();
+  function handleInput() {
+    const v = $('input').value.trim();
+    if (!v) return;
+    if (v.startsWith('/')) {
+      handleCommand(v);
+    } else {
+      // send to active channel or show error
+      if (!activeChannel) { pushSystem('No active channel. Use /join <#channel> or specify /msg'); $('input').value = ''; return; }
+      sendRaw(`PRIVMSG ${activeChannel} :${v}`);
+      pushMessage(nick, v); // optimistic
+    }
+    $('input').value = '';
+  }
 
-                connectToIRC(nickname, fullChannel);
-            }
-        });
+  function handleCommand(line) {
+    const parts = line.slice(1).split(' ');
+    const cmd = parts.shift().toLowerCase();
+    if (cmd === 'join') {
+      const chan = parts[0];
+      if (!chan) { pushSystem('Usage: /join #channel'); return; }
+      sendRaw('JOIN ' + chan);
+      ensureChannel(chan);
+      if (!activeChannel) switchChannel(chan);
+      updateChannelsUI();
+    } else if (cmd === 'part') {
+      const chan = parts[0] || activeChannel;
+      if (!chan) { pushSystem('Usage: /part #channel'); return; }
+      sendRaw('PART ' + chan);
+      delete state.channels[chan];
+      updateChannelsUI();
+      if (activeChannel === chan) { activeChannel = null; currentChannelEl.textContent = '—'; }
+    } else if (cmd === 'nick') {
+      const newNick = parts[0];
+      if (!newNick) { pushSystem('Usage: /nick newnick'); return; }
+      sendRaw('NICK ' + newNick);
+      nick = newNick;
+      $('nick').value = newNick;
+    } else if (cmd === 'me') {
+      const text = parts.join(' ');
+      if (!text) return;
+      sendRaw(`PRIVMSG ${activeChannel} :\u0001ACTION ${text}\u0001`);
+      pushMessage(nick, text, true);
+    } else if (cmd === 'msg') {
+      const target = parts.shift();
+      const text = parts.join(' ');
+      if (!target || !text) { pushSystem('Usage: /msg nick message'); return; }
+      sendRaw(`PRIVMSG ${target} :${text}`);
+      pushMessage(`-> ${target}`, text);
+    } else if (cmd === 'raw') {
+      const raw = parts.join(' ');
+      sendRaw(raw);
+    } else if (cmd === 'clear') {
+      messages.innerHTML = '';
+    } else {
+      pushSystem('Unknown command: ' + cmd);
+    }
+  }
 
-        disconnectBtn.addEventListener('click', () => {
-            if (socket) {
-                sendIRCCommand(`QUIT :Leaving`);
-                socket.close();
-            }
-        });
+  // Connect function
+  function connect(url) {
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      pushSystem('Invalid WebSocket URL');
+      return;
+    }
+    statusEl.textContent = 'Connecting...';
+    $('btn-connect').disabled = true;
 
-        messageForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const text = messageInput.value.trim();
-            const channel = channelInput.value.trim();
-            if (text && isConnected) {
-                sendIRCCommand(`PRIVMSG ${channel} :${text}`);
-                addMessage({
-                    type: 'message',
-                    nick: nicknameInput.value.trim(),
-                    text: text
-                });
-                messageInput.value = '';
-            }
-        });
+    ws.addEventListener('open', () => {
+      connected = true;
+      statusEl.textContent = 'Connected';
+      $('btn-disconnect').disabled = false;
+      connInfoEl.textContent = url;
+      // send initial registration lines — some gateways accept NICK/USER
+      sendRaw('NICK ' + nick);
+      sendRaw('USER ' + (document.getElementById('realname').value || 'pIRC') + ' 0 * :pIRC web client');
+      pushSystem('Connected to ' + url);
+    });
 
-        userListToggle.addEventListener('click', () => toggleUserList(true));
-        userListClose.addEventListener('click', () => toggleUserList(false));
+    ws.addEventListener('message', ev => {
+      const data = ev.data + '';
+      // Some gateways send multiple lines joined
+      const lines = data.split(/\r?\n/).filter(Boolean);
+      lines.forEach(l => parseIrcLine(l));
+    });
 
-        // --- Initial Setup ---
-        document.addEventListener('DOMContentLoaded', () => {
-            nicknameInput.value = `Gemini_${Math.floor(1000 + Math.random() * 9000)}`;
-        });
+    ws.addEventListener('close', (ev) => {
+      connected = false;
+      statusEl.textContent = 'Disconnected';
+      $('btn-connect').disabled = false;
+      $('btn-disconnect').disabled = true;
+      pushSystem('Disconnected');
+    });
 
-    </script>
+    ws.addEventListener('error', (ev) => {
+      pushSystem('WebSocket error');
+      console.error(ev);
+    });
+  }
+
+  // small utility: allow tapping nick names to /msg
+  nicklistEl.addEventListener('click', (ev) => {
+    const t = ev.target.closest('div');
+    if (!t) return;
+    const name = t.textContent.trim();
+    $('input').value = `/msg ${name} `;
+    $('input').focus();
+  });
+
+  // initial demo tips
+  pushSystem('Welcome to pIRC — enter a WebSocket IRC gateway URL and connect.');
+  pushSystem('Example: wss://irc-ws.example/ws (you need an IRC websocket gateway)');
+
+})();
+</script>
 </body>
 </html>
-
