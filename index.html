@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mIRC.js - Simple HTML Client</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* A little bit of custom styling for scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; /* bg-gray-800 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; /* bg-gray-600 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; /* bg-gray-500 */
+        }
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="bg-gray-800 text-gray-200 font-sans h-screen w-screen flex flex-col antialiased">
+
+    <!-- Connection Modal -->
+    <div id="connect-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-700 p-8 rounded-lg shadow-2xl w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-6 text-white text-center">Connect to IRC</h2>
+            <form id="connect-form">
+                <div class="mb-4">
+                    <label for="nickname" class="block text-gray-300 mb-2">Nickname</label>
+                    <input type="text" id="nickname" class="w-full bg-gray-800 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="mb-6">
+                    <label for="channel" class="block text-gray-300 mb-2">Channel</label>
+                    <input type="text" id="channel" value="#tailwind-css" class="w-full bg-gray-800 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="#channel-name" required>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors duration-200">
+                    Connect
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Header -->
+    <header class="bg-gray-900 shadow-md p-3 flex justify-between items-center z-10 flex-shrink-0">
+        <h1 class="text-xl font-bold text-white">mIRC.js</h1>
+        <div id="connection-status" class="flex items-center space-x-4 hidden">
+            <div class="text-sm text-right">
+                <div id="user-nickname" class="font-semibold"></div>
+                <div id="user-channel" class="text-gray-400"></div>
+            </div>
+            <button id="disconnect-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-md transition-colors duration-200">
+                Disconnect
+            </button>
+        </div>
+    </header>
+    
+    <!-- Chat Area -->
+    <main id="chat-container" class="flex-grow flex overflow-hidden hidden">
+        <!-- Message List -->
+        <div class="flex-grow flex flex-col">
+            <div id="message-list" class="flex-grow overflow-y-auto p-2 space-y-1">
+                <!-- Messages will be injected here by JavaScript -->
+            </div>
+            <!-- Message Input -->
+            <div class="p-4 bg-gray-900">
+                <form id="message-form">
+                    <input type="text" id="message-input" placeholder="Type your message..." class="w-full bg-gray-800 border border-gray-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off">
+                </form>
+            </div>
+        </div>
+        <!-- User List -->
+        <aside class="w-64 bg-gray-900 flex-shrink-0 p-4 overflow-y-auto">
+            <h3 class="text-lg font-bold mb-4 text-white">Users (<span id="user-count">0</span>)</h3>
+            <ul id="user-list">
+                <!-- User list will be injected here -->
+            </ul>
+        </aside>
+    </main>
+
+    <!-- Placeholder for when not connected -->
+    <div id="disconnected-placeholder" class="flex-grow flex items-center justify-center text-gray-500">
+        <p>Please connect to a server to begin chatting.</p>
+    </div>
+
+
+    <script>
+        // --- DOM Elements ---
+        const connectModal = document.getElementById('connect-modal');
+        const connectForm = document.getElementById('connect-form');
+        const nicknameInput = document.getElementById('nickname');
+        const channelInput = document.getElementById('channel');
+        
+        const headerStatus = document.getElementById('connection-status');
+        const userNickname = document.getElementById('user-nickname');
+        const userChannel = document.getElementById('user-channel');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+
+        const chatContainer = document.getElementById('chat-container');
+        const disconnectedPlaceholder = document.getElementById('disconnected-placeholder');
+        
+        const messageList = document.getElementById('message-list');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+
+        const userList = document.getElementById('user-list');
+        const userCount = document.getElementById('user-count');
+
+        // --- App State ---
+        let isConnected = false;
+        // In a real app, this would be a WebSocket object.
+        let connection = null; 
+
+        // --- Mock Data ---
+        const mockMessages = [
+            { type: 'system', text: 'Welcome to #tailwind-css! The topic is: "The official Tailwind CSS IRC channel."' },
+            { type: 'message', nick: 'Drizzt', text: 'Hey everyone, what\'s the best way to handle dynamic themes?' },
+            { type: 'message', nick: 'Gemini', text: 'You can use CSS variables combined with data attributes on your body tag. Super clean.' },
+            { type: 'join', nick: 'Cattie-brie' },
+            { type: 'message', nick: 'Cattie-brie', text: 'Just joined! Liking this web client.' },
+            { type: 'part', nick: 'Drizzt', reason: 'Coding time!' },
+        ];
+
+        const mockUsers = [
+            { nick: 'Gemini', status: '@' },
+            { nick: 'Cattie-brie', status: '+' },
+            { nick: 'Wulfgar', status: '' },
+            { nick: 'Bruenor', status: '' },
+        ];
+        // --- End Mock Data ---
+
+
+        // --- UI Update Functions ---
+
+        function showChatWindow() {
+            connectModal.classList.add('hidden');
+            disconnectedPlaceholder.classList.add('hidden');
+            chatContainer.classList.remove('hidden');
+            headerStatus.classList.remove('hidden');
+        }
+
+        function showConnectWindow() {
+            connectModal.classList.remove('hidden');
+            disconnectedPlaceholder.classList.remove('hidden');
+            chatContainer.classList.add('hidden');
+            headerStatus.classList.add('hidden');
+            messageInput.value = '';
+        }
+
+        function addMessage(msg) {
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            let messageElement = document.createElement('div');
+
+            switch (msg.type) {
+                case 'system':
+                    messageElement.className = "text-blue-400 px-4 py-1";
+                    messageElement.innerHTML = `-- ${msg.text} --`;
+                    break;
+                case 'join':
+                    messageElement.className = "text-green-500 px-4 py-1";
+                    messageElement.innerHTML = `--> ${msg.nick} has joined the channel.`;
+                    break;
+                case 'part':
+                    messageElement.className = "text-red-500 px-4 py-1";
+                    messageElement.innerHTML = `<-- ${msg.nick} has left the channel (${msg.reason}).`;
+                    break;
+                case 'message':
+                default:
+                    messageElement.className = "flex px-4 py-1 hover:bg-gray-700";
+                    messageElement.innerHTML = `
+                        <span class="text-gray-500 w-16 text-right mr-2 flex-shrink-0">${timestamp}</span>
+                        <span class="font-bold w-32 text-right mr-4 flex-shrink-0 text-cyan-400">&lt;${msg.nick}&gt;</span>
+                        <p class="flex-grow">${msg.text}</p>
+                    `;
+            }
+            messageList.appendChild(messageElement);
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        function updateUsers(users) {
+            userList.innerHTML = ''; // Clear existing users
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.className = "flex items-center mb-2";
+                li.innerHTML = `
+                    <span class="text-yellow-500 mr-2 w-4">${user.status}</span>
+                    <span class="text-gray-300">${user.nick}</span>
+                `;
+                userList.appendChild(li);
+            });
+            userCount.textContent = users.length;
+        }
+
+        // --- Event Listeners ---
+
+        connectForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const nickname = nicknameInput.value.trim();
+            const channel = channelInput.value.trim();
+
+            if (nickname && channel) {
+                isConnected = true;
+                
+                // Update UI
+                userNickname.textContent = nickname;
+                userChannel.textContent = `Connected to ${channel.startsWith('#') ? channel : '#' + channel}`;
+                showChatWindow();
+
+                // Populate with mock data for now
+                messageList.innerHTML = '';
+                mockMessages.forEach(addMessage);
+                updateUsers(mockUsers);
+            }
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            isConnected = false;
+            // In a real app, you'd close the WebSocket connection here.
+            showConnectWindow();
+        });
+
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+            if (text && isConnected) {
+                console.log('Sending message:', text);
+                // In a real app, you'd send this over the WebSocket.
+                // For now, we'll just add it to our own message list.
+                addMessage({
+                    type: 'message',
+                    nick: nicknameInput.value,
+                    text: text
+                });
+                messageInput.value = '';
+            }
+        });
+
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set a default random nickname
+            nicknameInput.value = `Gemini_${Math.floor(1000 + Math.random() * 9000)}`;
+        });
+
+    </script>
+</body>
+</html>
