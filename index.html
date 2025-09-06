@@ -310,9 +310,8 @@
                 sendIRCCommand(`JOIN ${channel}`);
                 
                 isConnected = true;
-                userNickname.textContent = nickname;
+                // Update status from "Connecting..." to "Connected"
                 userChannel.textContent = `Connected to ${channel}`;
-                showChatWindow();
             };
 
             socket.onmessage = handleSocketMessage;
@@ -340,7 +339,14 @@
             const channel = channelInput.value.trim();
             
             if (nickname && channel) {
-                connectToIRC(nickname, channel.startsWith('#') ? channel : '#' + channel);
+                const fullChannel = channel.startsWith('#') ? channel : '#' + channel;
+                
+                // Immediately switch to the chat window to show progress
+                userNickname.textContent = nickname;
+                userChannel.textContent = `Connecting to ${fullChannel}...`;
+                showChatWindow();
+
+                connectToIRC(nickname, fullChannel);
             }
         });
 
